@@ -42,7 +42,7 @@ class HistoryTree {
     }
 
     getHistory() {
-        getHistoryHelper = function(node, currentTree) {
+        let getHistoryHelper = function(node, currentTree) {
             currentTree.push(node);
             if (node.nextNodes.length == 0) {
                 return currentTree;
@@ -61,30 +61,45 @@ class HistoryTree {
         return getHistoryHelper(this.root, new Array());
     }
 }
+let history = new Map();
 
 chrome.runtime.onConnect.addListener(function(port) {
     console.log('adding listener');
     port.onMessage.addListener(function(message) {
-        chrome.storage.sync.get('history', function(result) {
-        port.postMessage(result.history.getHistory());
-    });
+        console.log(message);
+        console.log("sending history message");
+        port.postMessage({"new_history": history.get(message.request).getHistory()});
     });
 });
 
 chrome.tabs.onCreated.addListener(function(changeInfo) {
-    history = new HistoryTree(changeInfo.title, changeInfo.url);
-    chrome.storage.sync.set({'history': history}, function() {
-        console.log('history is set to ' + history);
-    });
+        if (history == null) {
+            console.log('history is NOT SET');
+        } else if (history.get(changeInfo.id) == null) {
+            history.set(changeInfo.id, new HistoryTree(changeInfo.title, changeInfo.url));
+        }
 });
 
 chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
-    chrome.storage.sync.get('history', function(result) {
-        console.log('onUpated history ' + result.history);
-        if (result.history == null) {
-            result.history = new HistoryTree(changeInfo.title, changeInfo.url);
-        } else {
-        result.history.onNavigateToNewPage(changeInfo.title, changeInfo.url);
-        }
+    if (history == null) {
+        console.log('HISTORY NOT SET ON UPDATE');
+        return;
+    }
+    if (tab.status != "complete") {
+        return;
+    }
+
+    let relevantHistoryTab = history.get(tabId);
+    console.log('onUpated history ' + relevantHistoryTab);
+    if (relevantHistoryTab == null) {
+        history.set(tabId, new HistoryTree(changeInfo.title, changeInfo.url));
+    } else {
+            relevantHistoryTab.onNavigateToNewPage(changeInfo.title, changeInfo.url);
+    }
+        //else {
+        //    let history = new Map([[tabId, new HistoryTree(changeInfo.title, changeInfo.url)]]);
+         //   chrome.storage.local.set({history: history}, function() {
+         //       console.log('history is set to ' + history);
+          //  });
+        //}
     });
-});
